@@ -83,7 +83,8 @@ class UpdateState(sublime_plugin.EventListener):
         })
         ensure_panel(window)
         if panel_is_active(window):
-            update_panel_selection(**State)
+            fill_panel(window)
+            # update_panel_selection(**State)
 
     def on_selection_modified_async(self, view):
         active_view = State['active_view']
@@ -383,9 +384,23 @@ def fill_panel(window, then=draw_on_main_thread):
     )
 
     to_render = []
-    for fpath, errors in sorted(
-        (fpath_by_bid[bid], errors) for bid, errors in errors_by_bid.items()
-    ):
+    active_view = State['active_view']
+    if active_view:
+        active_bid = active_view.buffer_id()
+        sorted_errors = sorted(
+            (fpath_by_bid[bid], errors)
+            for bid, errors in errors_by_bid.items()
+            if bid != active_bid
+        ) + (
+            [(fpath_by_bid[active_bid], errors_by_bid[active_bid])]
+            if active_bid in errors_by_bid
+            else []
+        )
+    else:
+        sorted_errors = sorted(
+            (fpath_by_bid[bid], errors) for bid, errors in errors_by_bid.items()
+        )
+    for fpath, errors in sorted_errors:
         to_render.append(format_header(fpath))
 
         base_lineno = len(to_render)
@@ -543,6 +558,8 @@ def scroll_into_view(panel, wanted_lines, errors):
     much as possible.
     """
     if not errors or not wanted_lines:
+        r, _ = panel.rowcol(panel.size())
+        scroll_to_line(panel, r, animate=False)
         return
 
     # We would like to use just `view.visible_region()` but that doesn't count
